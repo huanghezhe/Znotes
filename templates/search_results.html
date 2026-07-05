@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>搜索结果</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <h1>笔记库</h1>
+      <a href="/" class="back-link">← 返回首页</a>
+      <form action="/search" method="get" class="search-box">
+        <input type="text" name="q" placeholder="搜索笔记..." value="{{ query }}">
+        <button type="submit">搜索</button>
+      </form>
+    </aside>
+    <main class="content">
+      <h2>搜索结果</h2>
+      {% if results %}
+        <ul class="search-list">
+          {% for item in results %}
+            <li class="search-item">
+              <a class="search-title" href="/note/{{ item.path }}">{{ item.title }}</a>
+              <div class="match-badges">
+                {% if item.matched_title %}<span class="match-badge">匹配：文件名</span>{% endif %}
+                {% if item.matched_path %}<span class="match-badge">匹配：路径</span>{% endif %}
+                {% if item.matched_content %}<span class="match-badge">匹配：内容</span>{% endif %}
+              </div>
+              {% set folder_parts = item.path.split('/')[:-1] %}
+              <div class="result-actions">
+                {% if item.matched_content or item.matched_title %}
+                  <a class="btn" href="/note/{{ item.path }}">打开内容</a>
+                {% endif %}
+                {% if (item.matched_path or item.matched_title) and folder_parts|length > 0 %}
+                  <a class="btn" href="/folder/{{ folder_parts|join('/') }}">打开文件夹</a>
+                {% endif %}
+              </div>
+              {% if item.snippet %}
+                <div class="search-snippet">{{ item.snippet|safe }}</div>
+              {% endif %}
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p>没有找到匹配内容。</p>
+      {% endif %}
+    </main>
+  </div>
+</body>
+</html>

@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>个人笔记</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js"></script>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <h1>笔记库</h1>
+      <form action="/search" method="get" class="search-box" onsubmit="return false;">
+        <input id="live-search" type="text" name="q" placeholder="搜索笔记..." autocomplete="off" value="{{ request.args.get('q', '') }}">
+        <button id="live-search-btn" type="button">搜索</button>
+      </form>
+      <div id="live-results" class="live-results" aria-live="polite"></div>
+      <div class="tree">
+        {% macro render_tree(nodes, current_note='') %}
+          <ul class="tree-list">
+            {% for item in nodes %}
+              {% if item.type == 'folder' %}
+                <li class="tree-item folder-item collapsed" data-folder-path="{{ item.path }}">
+                  <button class="tree-toggle" type="button" aria-expanded="false">
+                    <span class="tree-icon">▸</span>
+                    <span>📁 {{ item.name }}</span>
+                  </button>
+                  <div class="tree-children">
+                    {{ render_tree(item.children, current_note) }}
+                  </div>
+                </li>
+              {% else %}
+                <li class="tree-item file-item">
+                  <a class="file{% if current_note == item.path %} active{% endif %}" href="/note/{{ item.path }}">📝 {{ item.name }}</a>
+                </li>
+              {% endif %}
+            {% endfor %}
+          </ul>
+        {% endmacro %}
+        {{ render_tree(tree, current_note or '') }}
+      </div>
+    </aside>
+    <main class="content">
+      {% if current_note %}
+        <h2>{{ title }}</h2>
+        <div id="note" class="note-content">{{ content|safe }}</div>
+      {% else %}
+        <div class="welcome">
+          <h2>欢迎使用个人笔记网页</h2>
+          <p>请在 notes 目录下放入 Markdown 文件，目录结构会自动显示为笔记树。</p>
+        </div>
+      {% endif %}
+    </main>
+  </div>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      document.querySelectorAll('.tree-toggle').forEach((button) => {
+        button.addEventListener('click', () => {
+          const item = button.closest('.folder-item');
+          const collapsed = item.classList.toggle('collapsed');
+          button.setAttribute('aria-expanded', String(!collapsed));
+          button.querySelector('.tree-icon').textContent = collapsed ? '▸' : '▾';
+        });
+      });
+      // Initialize KaTeX auto-render on the note container if available
+      if (window.renderMathInElement) {
+        const target = document.getElementById('note') || document.body;
+        renderMathInElement(target, {
+          delimiters: [
+            {left: '$$', right: '$$', display: true},
+            {left: '$', right: '$', display: false}
+          ],
+          throwOnError: false
+        });
+      }
+
+      // Instant search: debounced fetch to /api/search
+      const input = document.getElementById('live-search');
+      const btn = document.getElementById('live-search-btn');
+      const resultsBox = document.getElementById('live-results');
+      let timer = null;
+      function renderResults(list) {
+        if (!list || list.length === 0) {
+          resultsBox.innerHTML = '<div class="no-results">无匹配</div>';
+          return;
+        }
+        resultsBox.innerHTML = list.map(item => {
+          const badges = [];
+          if (item.matched_title) badges.push('<span class="match-badge">文件名</span>');
+          if (item.matched_path) badges.push('<span class="match-badge">路径</span>');
+          if (item.matched_content) badges.push('<span class="match-badge">内容</span>');
+          const folder = item.folder || '';
+          const showOpenContent = item.matched_content || item.matched_title;
+          const showOpenFolder = (item.matched_path || item.matched_title) && folder;
+          return `\n          <div class="live-item">\n            <div class="live-title"><a href="/note/${item.path}">${item.title}</a></div>` +
+            `<div class="match-badges">${badges.join(' ')}</div>` +
+            `<div class="result-actions">` +
+            (showOpenContent ? `<a class="btn" href="/note/${item.path}">打开内容</a>` : '') +
+            (showOpenFolder ? `<button class="btn folder-open-btn" type="button" data-folder="${folder}">打开文件夹</button>` : '') +
+            `</div>` +
+            (item.snippet ? `<div class="live-snippet">${item.snippet}</div>` : '') +
+            `</div>`;
+        }).join('');
+      }
+
+      async function doSearch(q) {
+        if (!q) { resultsBox.innerHTML = ''; return; }
+        try {
+          const res = await fetch('/api/search?q=' + encodeURIComponent(q));
+          if (!res.ok) return;
+          const data = await res.json();
+          renderResults(data);
+        } catch (e) {
+          console.error(e);
+        }
+      }
+
+      function expandSidebarFolder(path) {
+        if (!path) return;
+        const parts = path.split('/');
+        let currentPath = '';
+        parts.forEach((part, index) => {
+          currentPath = index === 0 ? part : `${currentPath}/${part}`;
+          const folderItem = document.querySelector(`.folder-item[data-folder-path="${CSS.escape(currentPath)}"]`);
+          if (folderItem && folderItem.classList.contains('collapsed')) {
+            const button = folderItem.querySelector('.tree-toggle');
+            if (button) {
+              button.click();
+            }
+          }
+        });
+        const target = document.querySelector(`.folder-item[data-folder-path="${CSS.escape(path)}"]`);
+        if (target) {
+          target.scrollIntoView({behavior: 'smooth', block: 'center'});
+        }
+      }
+
+      input.addEventListener('input', (e) => {
+        clearTimeout(timer);
+        timer = setTimeout(() => doSearch(e.target.value.trim()), 250);
+      });
+      btn.addEventListener('click', () => doSearch(input.value.trim()));
+      document.body.addEventListener('click', (event) => {
+        const btn = event.target.closest('.folder-open-btn');
+        if (!btn) return;
+        const folder = btn.getAttribute('data-folder');
+        expandSidebarFolder(folder);
+      });
+    });
+  </script>
+</body>
+</html>
