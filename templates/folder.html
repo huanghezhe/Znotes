@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>文件夹: {{ folder }}</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <h1>笔记库</h1>
+      <a href="/">← 返回首页</a>
+    </aside>
+    <main class="content">
+      <h2>文件夹：{{ folder or '/' }}</h2>
+      {% if subfolders %}
+        <h3>子文件夹</h3>
+        <ul>
+          {% for s in subfolders %}
+            <li><a href="/folder/{{ (folder + '/' + s).lstrip('/') }}">{{ s }}</a></li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+      <h3>笔记列表</h3>
+      {% if files %}
+        <ul>
+        {% for f in files %}
+          <li><a href="/note/{{ f.path }}">{{ f.name }}</a></li>
+        {% endfor %}
+        </ul>
+      {% else %}
+        <p>该文件夹下没有 Markdown 笔记。</p>
+      {% endif %}
+    </main>
+  </div>
+</body>
+</html>
